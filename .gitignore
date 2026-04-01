@@ -1,0 +1,12 @@
+build
+mx.scratch
+!.settings
+*.FCBak
+fp-info-cache
+.vscode
+.settings
+*backups
+Examples
+.DS_Store
+Thumbs.db
+config.h

@@ -1,0 +1,3 @@
+[submodule "lwjson"]
+	path = lwjson
+	url = https://github.com/MaJerle/lwjson.git
