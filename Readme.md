@@ -100,6 +100,11 @@ As a proof of concept, these are the feature highlights of the project:
    * TAHOMA_HOST: the Tahoma Switch hostname, typically in the form 'gateway-\<box pin code\>.local'
    * TAHOMA_AUTH: the developer token generated within Somfy App
    * shutterConfigTable takes a set of roller shutters in the system (see TahomaManger.h for the structure of ShutterConfig entries)
- 5. Configure the project using device STM32F405RGT6 and GCC toolchain
+ 5. Configure and build the project using device STM32F405RGT6 and GCC toolchain in VSCode
+    
+    alternatively, if cmake and ninja are installed on the system, you can run these commands:
+
+        cmake --preset Release
+        cmake --build --preset Release
  6. Connect ST-Link to the SWO interface on Tahoma Remote
  7. Flash the firmware: Run and Debug and apply "STM32Cube: STLink GDB Server"
