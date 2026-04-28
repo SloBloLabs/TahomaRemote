@@ -168,3 +168,4 @@ void MX_USART2_UART_Init(void)
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
+
