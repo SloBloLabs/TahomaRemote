@@ -32,7 +32,7 @@ static AT_Status espCloseConnection();
 // Tahoma Constants
 constexpr std::string_view HTTP_PROTOCOL  = "SSL";
 constexpr short            TAHOMA_PORT    = 8443;
-constexpr short            TAHOMA_TIMEOUT = 7200; // in seconds
+constexpr short            TAHOMA_TIMEOUT = 40; // in seconds
 
 void espInit() {
     _streamParser = nullptr;
@@ -357,7 +357,7 @@ static AT_Status espHttpRequest(std::string_view method, std::string_view reques
 
 static AT_Status espCloseConnection() {
     AT_Status status = ESP8266_OK;
-    if(!_connectionEstablished) {
+    if(_connectionEstablished) {
         status = espSendCommand("AT+CIPCLOSE\r\n", "CLOSED\r\n\r\nOK\r\n", 0);
     }
     _connectionEstablished = false;

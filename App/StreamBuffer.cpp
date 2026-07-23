@@ -36,6 +36,18 @@ char streamBufferPop(StreamBuffer_t* sb) {
     return c;
 }
 
+// Creates a temporary linear view of the ring buffer. tempBuffer must be at
+// least STREAM_BUFFER_CAPACITY + 1 bytes (sb->count can never exceed sb->size,
+// and sb->size is set to STREAM_BUFFER_CAPACITY in streamBufferInit()).
+static void streamBufferLinearize(StreamBuffer_t* sb, char* tempBuffer) {
+    uint16_t pos = sb->tail;
+    for(uint16_t i = 0; i < sb->count; i++) {
+        tempBuffer[i] = sb->buffer[pos];
+        pos = (pos + 1) % sb->size;
+    }
+    tempBuffer[sb->count] = 0;
+}
+
 bool streamBufferContains(StreamBuffer_t* sb, const char* token) {
     if(!token || sb->count == 0) {
         return false;
@@ -46,18 +58,29 @@ bool streamBufferContains(StreamBuffer_t* sb, const char* token) {
         return false;
     }
     
-    // Create a temporary linear view of the buffer
-    char tempBuffer[256];
-    uint16_t pos = sb->tail;
-    
-    for(uint16_t i = 0; i < sb->count; i++) {
-        tempBuffer[i] = sb->buffer[pos];
-        pos = (pos + 1) % sb->size;
-    }
-    tempBuffer[sb->count] = 0;
+    char tempBuffer[STREAM_BUFFER_CAPACITY + 1];
+    streamBufferLinearize(sb, tempBuffer);
     
     // Search for token
     return strstr(tempBuffer, token) != NULL;
+}
+
+void streamBufferContainsTokens(StreamBuffer_t* sb, const char* tokenA, bool* foundA, const char* tokenB, bool* foundB) {
+    *foundA = false;
+    *foundB = false;
+    if(sb->count == 0) {
+        return;
+    }
+    
+    char tempBuffer[STREAM_BUFFER_CAPACITY + 1];
+    streamBufferLinearize(sb, tempBuffer);
+    
+    if(tokenA && strlen(tokenA) <= sb->count) {
+        *foundA = strstr(tempBuffer, tokenA) != NULL;
+    }
+    if(tokenB && strlen(tokenB) <= sb->count) {
+        *foundB = strstr(tempBuffer, tokenB) != NULL;
+    }
 }
 
 uint16_t streamBufferGetCount(StreamBuffer_t* sb) {
