@@ -72,6 +72,7 @@ char nextChar();
 size_t readRingBuffer(char* buf);
 void uartRxCallback();
 void uartTxCompleteCallback(void);
+void uartRxSemInit(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

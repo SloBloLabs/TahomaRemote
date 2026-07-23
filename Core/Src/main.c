@@ -60,6 +60,11 @@ volatile size_t writePtr = 0;
 #define TX_BUFFER_SIZE 1024
 char txBuffer[TX_BUFFER_SIZE];
 volatile uint8_t transmissionComplete = 1;
+
+// Signaled from the UART RX ISR (USART idle-line / DMA half-transfer / DMA
+// transfer-complete) whenever new bytes may be available. Lets nextChar()
+// block briefly instead of busy-spinning while waiting for the ESP8266.
+static osSemaphoreId_t rxDataSem = NULL;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -234,9 +239,21 @@ size_t available() {
   }
 }
 
+void uartRxSemInit(void) {
+  rxDataSem = osSemaphoreNew(1, 0, NULL);
+}
+
 char nextChar() {
   if(!available()) {
-    return 0;
+    // Block briefly for new data instead of busy-spinning; rxDataSem is
+    // released by uartRxCallback() when the ISR observes new bytes. Bounded
+    // wait keeps callers' own timeout/elapsed-time checks working as before.
+    if(rxDataSem != NULL) {
+      osSemaphoreAcquire(rxDataSem, 5);
+    }
+    if(!available()) {
+      return 0;
+    }
   }
   char c = rxBuffer[readPtr++];
   if(readPtr == RX_BUFFER_SIZE) {
@@ -247,6 +264,9 @@ char nextChar() {
 
 void uartRxCallback() {
   writePtr = sizeof(rxBuffer) - LL_DMA_GetDataLength(DMA2, LL_DMA_STREAM_5);
+  if(rxDataSem != NULL) {
+    osSemaphoreRelease(rxDataSem);
+  }
 }
 
 void uartTxCompleteCallback() {
