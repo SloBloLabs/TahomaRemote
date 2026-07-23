@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "App.h"
+#include "usart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,6 +62,13 @@ const osThreadAttr_t comTask_attributes = {
   .stack_size = 4096 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
+/* Definitions for monitorTask */
+osThreadId_t monitorTaskHandle;
+const osThreadAttr_t monitorTask_attributes = {
+  .name = "monitorTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -69,6 +77,7 @@ const osThreadAttr_t comTask_attributes = {
 
 void StartUiTask(void *argument);
 void StartComTask(void *argument);
+void StartMonitorTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -82,25 +91,35 @@ void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
    configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
    called if a stack overflow is detected. */
   // Print directly to UART without FreeRTOS calls (we're in exception context)
-  const char *msg = "\n\n*** STACK OVERFLOW ***\n";
-  for (const char *p = msg; *p; p++) {
+  LL_USART_DeInit(USART2);
+  MX_USART2_UART_Init();
+
+  char msg[100];
+  sprintf(msg, "\n\n*** STACK OVERFLOW ***\npcTaskName = %s\n**********************\n", pcTaskName);
+  for(const char *p = msg; *p; ++p) {
     while(!LL_USART_IsActiveFlag_TXE(USART2));
     LL_USART_TransmitData8(USART2, *p);
   }
-  
-  // Print task name if available
-  if (pcTaskName) {
-    for (const signed char *p = pcTaskName; *p; p++) {
-      while(!LL_USART_IsActiveFlag_TXE(USART2));
-      LL_USART_TransmitData8(USART2, *p);
-    }
-  }
-  
-  const char *end = "\n";
-  for (const char *p = end; *p; p++) {
-    while(!LL_USART_IsActiveFlag_TXE(USART2));
-    LL_USART_TransmitData8(USART2, *p);
-  }
+
+  //const char *msg = "\n\n*** STACK OVERFLOW ***\n";
+  //for (const char *p = msg; *p; p++) {
+  //  while(!LL_USART_IsActiveFlag_TXE(USART2));
+  //  LL_USART_TransmitData8(USART2, *p);
+  //}
+  //
+  //// Print task name if available
+  //if (pcTaskName) {
+  //  for (const signed char *p = pcTaskName; *p; p++) {
+  //    while(!LL_USART_IsActiveFlag_TXE(USART2));
+  //    LL_USART_TransmitData8(USART2, *p);
+  //  }
+  //}
+  //
+  //const char *end = "\n";
+  //for (const char *p = end; *p; p++) {
+  //  while(!LL_USART_IsActiveFlag_TXE(USART2));
+  //  LL_USART_TransmitData8(USART2, *p);
+  //}
   
   while(1); // Hang here so you can debug
 }
@@ -139,6 +158,9 @@ void MX_FREERTOS_Init(void) {
   /* creation of comTask */
   comTaskHandle = osThreadNew(StartComTask, NULL, &comTask_attributes);
 
+  /* creation of monitorTask */
+  monitorTaskHandle = osThreadNew(StartMonitorTask, NULL, &monitorTask_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -176,6 +198,29 @@ void StartComTask(void *argument)
   /* USER CODE BEGIN StartComTask */
   comMain();
   /* USER CODE END StartComTask */
+}
+
+/* USER CODE BEGIN Header_StartMonitorTask */
+/**
+* @brief Function implementing the monitorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartMonitorTask */
+void StartMonitorTask(void *argument)
+{
+  /* USER CODE BEGIN StartMonitorTask */
+  /* Infinite loop */
+  // see https://www.youtube.com/watch?v=PY_GuphBsyc
+  uint32_t uiStack, comStack;
+  for(;;)
+  {
+    osDelay(5000);
+    uiStack  = osThreadGetStackSpace(uiTaskHandle);
+    comStack = osThreadGetStackSpace(comTaskHandle);
+    printf("Stack free - uiTask: %lu bytes left,\t comTask: %lu bytes left\n", uiStack, comStack);
+  }
+  /* USER CODE END StartMonitorTask */
 }
 
 /* Private application code --------------------------------------------------*/
