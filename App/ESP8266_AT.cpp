@@ -613,14 +613,17 @@ AT_Status espNextChar(char* c) {
     //    _connectionEstablished = true;
     //}
 
-    if(streamBufferContains(&rxStreamBuffer, "CLOSED")) {
+    bool closedFound, errorFound;
+    streamBufferContainsTokens(&rxStreamBuffer, "CLOSED", &closedFound, "ERROR", &errorFound);
+
+    if(closedFound) {
         if(_connectionEstablished) {
             DEBUG_LOG("\n[espNextChar] Connection closed by remote");
         }
         _connectionEstablished = false;
     }
     
-    if(streamBufferContains(&rxStreamBuffer, "ERROR")) {
+    if(errorFound) {
         DEBUG_LOG("\n[espNextChar] Error received");
         if(_connectionEstablished) {
             DEBUG_LOG("\n[espNextChar] Closing connection due to error");
