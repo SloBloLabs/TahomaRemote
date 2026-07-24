@@ -249,7 +249,7 @@ char nextChar() {
     // released by uartRxCallback() when the ISR observes new bytes. Bounded
     // wait keeps callers' own timeout/elapsed-time checks working as before.
     if(rxDataSem != NULL) {
-      osSemaphoreAcquire(rxDataSem, 5);
+      osSemaphoreAcquire(rxDataSem, 500);
     }
     if(!available()) {
       return 0;
