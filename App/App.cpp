@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <string>
 #include <string_view>
+#include "FreeRTOS.h"
+#include "semphr.h"
 #include "lwjson/lwjson.h"
 #include "TahomaManager.h"
 #include "TahomaSetupParser.h"
@@ -19,9 +21,17 @@
 
 #define BUTTON_BRIGHTNESS 0.8f
 
+// Fetch interval for polling Tahoma events when idle
+#define FETCH_EVENTS_INTERVAL_MS 1500
+// Short window to coalesce further button presses before sending a batched closure request
+#define BUTTON_DEBOUNCE_MS 500
+
 LEDDriver ledDriver;
 __attribute__((section(".w"))) TahomaManager tahomaManager;
 ClosureSlider closureSlider;
+
+// Given from button ISRs (setButton), taken by comMain() to avoid busy-polling updateShutters()
+static SemaphoreHandle_t buttonEventSemaphore = NULL;
 
 void resetESP();
 void showIP();
@@ -195,6 +205,8 @@ void comMain() {
 
     disableButtons();
 
+    buttonEventSemaphore = xSemaphoreCreateBinary();
+
     appStatus = BOOTING;
 
     osDelay(2000);
@@ -218,16 +230,31 @@ void comMain() {
     
     while(1) {
 
-        curMillis = System::ticks();
-
         appStatus = SETUP_COMPLETED;
 
-        int n = updateShutters();
-        if(activateUpdateShutters && n > 0) {
-            DEBUG_LOG("\n[comMain] Updated %d shutters at %ld", n, curMillis);
+        // Block until either a button press signals a shutter change, or it's time to poll
+        // Tahoma for events. This avoids spinning the task at 100% CPU when idle.
+        curMillis = System::ticks();
+        uint32_t elapsedSinceFetch = curMillis - fetchEventMillis;
+        TickType_t waitTicks = (elapsedSinceFetch < FETCH_EVENTS_INTERVAL_MS)
+            ? pdMS_TO_TICKS(FETCH_EVENTS_INTERVAL_MS - elapsedSinceFetch)
+            : 0;
+
+        if(activateUpdateShutters && xSemaphoreTake(buttonEventSemaphore, waitTicks) == pdTRUE) {
+            // Button pressed: briefly wait for further presses (e.g. multiple shutters
+            // selected in quick succession) so they get batched into one closure request.
+            while(xSemaphoreTake(buttonEventSemaphore, pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS)) == pdTRUE) {
+                // keep draining, more button presses arrived within the debounce window
+            }
+
+            curMillis = System::ticks();
+            int n = updateShutters();
+            if(n > 0) {
+                DEBUG_LOG("\n[comMain] Updated %d shutters at %ld", n, curMillis);
+            }
         }
-        else if(activateFetchEvents && curMillis - fetchEventMillis > 1500) {
-            fetchEventMillis = curMillis;
+        else if(activateFetchEvents) {
+            fetchEventMillis = System::ticks();
 
             fetchEvents();
 
@@ -522,8 +549,20 @@ void appADCCompleted() {
 }
 
 void setButton(size_t numButton, bool isSet) {
+    // TODO: verify none of the interrupt handlers already run at a priority level restricted from calling
+    // FreeRTOS "FromISR" APIs (must be ≤ configMAX_SYSCALL_INTERRUPT_PRIORITY)
+    // gpio.c:210 sets all EXTI priorities via NVIC_EncodePriority(..., 5, 0), which should be safe under the default FreeRTOS config
+    
     //DEBUG_LOG("\n[setButton] Button #%d state changed: %s", numButton, isSet? "true":"false");
     tahomaManager.updateButtonState(numButton, isSet);
+
+    // Called from EXTI ISR context: wake comMain() via the button event semaphore
+    // instead of relying on it busy-polling for changed shutters.
+    if(buttonEventSemaphore != NULL && isSet) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xSemaphoreGiveFromISR(buttonEventSemaphore, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
 }
 
 void enableButtons() {
